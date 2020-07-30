@@ -7,7 +7,7 @@
 # IPMI BMC, but given it hasn't had time to boot, would fail, leaving the 
 # system stuck in a loop.
 # 
-# Digimer; digimer@digimer.ca
+# Madison Kelly, mkelly@alteeve.ca
 # http://alteeve.com/w
 #
 # This software is released under the GPL v2. See the LICENSE file in the
@@ -38,7 +38,7 @@ my $conf = {
 		action		=>	"off",
 		agent_version	=>	"1.0",
 		log_level	=>	1,
-		delay		=>	60,
+		wait		=>	60,
 		device		=>	"",
 		list		=>	"",
 		'log'		=>	"/var/log/fence_delay.log",
@@ -46,7 +46,7 @@ my $conf = {
 		node_name	=>	"",	# My name, as reported by cman_tool
 		nodes		=>	0,	# Number of nodes in the cluster
 		password	=>	"",
-		quiet		=>	0,
+		quiet		=>	1,
 		version		=>	0,
 	},
 	path		=>	{
@@ -65,7 +65,7 @@ if (1)
 	select STDOUT;
 	$| = 1;
 }
-record($conf, $log, "'fence_delay' called at: [".get_date_time($conf)."].\n", 1);
+record($conf, $log, "'fence_delay' called at: [".get_date_time($conf)."].\n", 2);
 
 # Read in arguments from the command line.
 read_cla($conf, $log);
@@ -97,7 +97,7 @@ if (($conf->{'system'}{action} eq "monitor") or ($conf->{'system'}{action} eq "l
 }
 
 # Do it!
-do_delay($conf, $log);
+do_wait($conf, $log);
 
 # Cleanup and exit.
 do_exit($conf, $log, );
@@ -127,7 +127,7 @@ sub help
 	# Point the user at the man page.
 	print "
 Passive fence agent used to inject a delay at the end of a list of fence 
-methods. Can take '--delay X' or 'delay=X' via the command line or STDIN
+methods. Can take '--wait X' or 'wait=X' via the command line or STDIN
 respectively. Otherwise, the default of '60' is used.
 
 This method is meant to ensure that devices that require time to boot get that
@@ -153,39 +153,35 @@ sub metadata
 {
 	my ($conf, $log) = @_;
 	
-	print q`
-<?xml version="1.0" ?>
+	print q`<?xml version="1.0" ?>
 <resource-agent name="fence_delay" shortdesc="Agent designed to pause at the end of a list of methods, before trying the first method again. Always returns 'failed' to the cluster.">
-<longdesc>
-This is a passive agent that simply injects a delay. 
-
-It is designed to be used at the end of a list of fence methods to give time for previous attempts to recover. Specifically, if PDU fencing cut power to the node but somehow reported as failed. The fence would move back up and try to fence via the IPMI BMC, but given it hasn't had time to boot, would fail, leaving the  system stuck in a loop.
-</longdesc>
+<longdesc>This is a passive agent that simply injects a delay. It is designed to be used at the end of a list of fence methods to give time for previous attempts to recover. Specifically, if PDU fencing cut power to the node but somehow reported as failed. The fence would move back up and try to fence via the IPMI BMC, but given it hasn't had time to boot, would fail, leaving the  system stuck in a loop.</longdesc>
+<vendor-url>http://www.alteeve.com</vendor-url>
 <parameters>
-	<parameter name="action" unique="1">
-		<getopt mixed="-o" />
+	<parameter name="action" unique="0">
+		<getopt mixed="-o, --action=[action]" />
 		<content type="string" default="off"/>
-		<shortdesc lang="en">Action (operation) to take. The 'reboot' and 'off' actions trigger the delay.</shortdesc>
+		<shortdesc lang="en">Fencing action. The 'reboot' and 'off' actions trigger the wait.</shortdesc>
 	</parameter>
-	<parameter name="quiet" unique="1">
+	<parameter name="quiet" unique="0">
 		<getopt mixed="-q" />
 		<content type="boolean" />
-		<shortdesc lang="en">(default) Supress all output to STDOUT, including critical messages. Check logfile if used. Default 1 (quiet).</shortdesc>
+		<shortdesc lang="en">Supress all output to STDOUT, including critical messages. Check logfile if used. Default 1.</shortdesc>
 	</parameter>
-	<parameter name="debug" unique="1">
+	<parameter name="debug" unique="0">
 		<getopt mixed="-d" />
 		<content type="boolean" />
 		<shortdesc lang="en">Print extensive debug information to STDOUT and to the log file.</shortdesc>
 	</parameter>
-	<parameter name="version" unique="1">
+	<parameter name="version" unique="0">
 		<getopt mixed="--version" />
 		<content type="boolean" />
 		<shortdesc lang="en">Prints the fence agent version and exits.</shortdesc>
 	</parameter>
-	<parameter name="delay" unique="1">
-		<getopt mixed="--delay" />
+	<parameter name="wait" unique="0">
+		<getopt mixed="-w, --wait=[seconds]" />
 		<content type="string" />
-		<shortdesc lang="en">Set the delay before the agent exits. The default is '60' seconds. </shortdesc>
+		<shortdesc lang="en">Set the time the agent waits before exiting. The default is 60 seconds.</shortdesc>
 	</parameter>
 </parameters>
 <actions>
@@ -205,19 +201,19 @@ It is designed to be used at the end of a list of fence methods to give time for
 }
 
 # This handles the actual actions.
-sub do_delay
+sub do_wait
 {
 	my ($conf, $log) = @_;
-	record($conf, $log, "In the 'do_delay' function.\n", 2);
+	record($conf, $log, "In the 'do_wait' function.\n", 2);
 	
 	# Make this more readable.
-	my $delay  = $conf->{'system'}{delay} =~ /^\d+$/ ? $conf->{'system'}{delay} : 60;
+	my $wait   = $conf->{'system'}{wait} =~ /^\d+$/ ? $conf->{'system'}{wait} : 60;
 	my $action = $conf->{'system'}{action};
 	if (($action eq "off") or ($action eq "reboot"))
 	{
-		record($conf, $log, "Sleeping for: [".$delay."] seconds.\n", 1);
+		record($conf, $log, "Sleeping for: [".$wait."] seconds.\n", 1);
 		
-		sleep $delay;
+		sleep $wait;
 		record($conf, $log, "Delay complete, exiting with failure code so fencing will try the next device in the list.\n", 1);
 		
 		# Report a successful failure.
@@ -292,10 +288,10 @@ sub read_cla
 			$conf->{'system'}{log_level} = 2;
 			record($conf, $log, "[ Debug ] - 'system::log_level': [".$conf->{'system'}{log_level}."]\n", 2);
 		}
-		elsif (($arg eq "-d") or ($arg eq "--delay"))
+		elsif (($arg eq "-w") or ($arg eq "--wait"))
 		{
-			# Enable debug mode.
-			$set_next = "delay";
+			# How long to wait before exiting.
+			$set_next = "wait";
 			record($conf, $log, "[ Debug ] - 'set_next': [".$set_next."]\n", 2);
 		}
 		elsif (($arg eq "-o") or ($arg eq "--action"))
@@ -356,12 +352,12 @@ sub read_stdin
 			# This is only used by 'fenced', but I record it for
 			# potential debugging.
 			$conf->{'system'}{agent} = $value;
-			record($conf, $log, "[ Debug ] - 'system::delay': [".$conf->{'system'}{agent}."]\n", 2);
+			record($conf, $log, "[ Debug ] - 'system::agent': [".$conf->{'system'}{agent}."]\n", 2);
 		}
 		elsif ($name eq "action")
 		{
 			$conf->{'system'}{action} = $value;
-			record($conf, $log, "[ Debug ] - 'system::delay': [".$conf->{'system'}{action}."]\n", 2);
+			record($conf, $log, "[ Debug ] - 'system::action': [".$conf->{'system'}{action}."]\n", 2);
 		}
 		elsif ($name eq "quiet")
 		{
@@ -373,10 +369,10 @@ sub read_stdin
 			$conf->{'system'}{log_level} = 2;
 			record($conf, $log, "[ Debug ] - 'system::log_level': [".$conf->{'system'}{log_level}."]\n", 2);
 		}
-		elsif ($name eq "delay")
+		elsif ($name eq "wait")
 		{
-			$conf->{'system'}{delay} = $value;
-			record($conf, $log, "[ Debug ] - 'system::delay': [".$conf->{'system'}{delay}."]\n", 2);
+			$conf->{'system'}{wait} = $value;
+			record($conf, $log, "[ Debug ] - 'system::wait': [".$conf->{'system'}{wait}."]\n", 2);
 		}
 		else
 		{
@@ -398,8 +394,8 @@ sub record
 	# Print to the log
 	print $log $msg;
 	
-	# Print to the screen
-	print $msg;
+	# Print to the screen if we're not 'quiet'.
+	print $msg if not $conf->{'system'}{quiet};
 	
 	return(0);
 }
