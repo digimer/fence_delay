@@ -1,3 +1,7 @@
+NOTE: - Development of this agent has moved to here:
+
+* https://github.com/ClusterLabs/anvil/blob/master/tools/fence_delay
+
 # fence_delay
 
 This is a fence agent that always fails after a given delay. It is meant to give other fence devices time to recover before a fence is attempted again.
